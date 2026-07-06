@@ -11,18 +11,21 @@ AUTO_DROP_SECONDS = 120  # 2 minutes
 HELP_TEXT = (
     "🦕 <b>Dino Word Guess</b>\n\n"
     "<b>How to play:</b>\n"
-    "1. Use /game — someone volunteers as leader by tapping the button.\n"
-    "2. Leader taps 🔍 <b>See word</b> to view the secret word (popup).\n"
-    "3. Tap ✏️ <b>Write word</b> to get the word sent to your private DM.\n"
-    "4. Tap 🔄 <b>Change word</b> to get a new random word.\n"
-    "5. Everyone else guesses by sending messages in the chat.\n"
-    "6. First correct guess wins a point and becomes the next leader!\n\n"
+    "1️⃣ /game — volunteer as leader by tapping the button.\n"
+    "2️⃣ Leader uses <b>See word</b> 🔍 to view the secret word.\n"
+    "3️⃣ Give hints in chat — <b>don't type the word itself!</b>\n"
+    "4️⃣ Everyone else guesses by sending messages.\n"
+    "5️⃣ First correct guess wins a point and becomes the next leader!\n\n"
+    "<b>Scoring:</b>\n"
+    "✅ Correct guess → +1 point for the guesser\n"
+    "⚠️ Leader types the secret word → -1 penalty for the leader\n\n"
     "<b>Commands:</b>\n"
-    "/game — start a round (volunteer as leader)\n"
+    "/game — start or check the current round\n"
     "/scores — leaderboard for this chat\n"
     "/addword &lt;word&gt; — suggest a new word\n"
-    "/pending — (owner) view pending word suggestions\n\n"
-    "⚠️ <i>In groups, make sure the bot's Privacy Mode is OFF in BotFather.</i>"
+    "/pending — (owner) review pending word suggestions\n"
+    "/help — show this message\n\n"
+    "⚠️ <i>In groups, Privacy Mode must be OFF in BotFather for guesses to work.</i>"
 )
 
 
@@ -47,7 +50,7 @@ def volunteer_keyboard():
 
 def new_game_keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🎮 Start new game!", callback_data="newgame"),
+        InlineKeyboardButton("🎲 Start new game!", callback_data="newgame"),
     ]])
 
 
@@ -76,8 +79,7 @@ async def schedule_auto_drop(chat_id: int, leader_id: int, bot):
             # Leader was active since we last checked — wait out the remaining gap
             remaining = AUTO_DROP_SECONDS - idle_secs
             await asyncio.sleep(remaining)
-            # Re-check at the top of the loop
-            continue
+            continue  # re-check at top of loop
 
         # Leader has been idle long enough — drop them
         leader_name = game["leader_name"]
@@ -122,21 +124,35 @@ async def scores_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     if not players:
         return await update.message.reply_text("No scores yet — start a game with /game!")
-    players.sort(key=lambda s: s["wins"], reverse=True)
+
+    # Sort by net score (wins - penalties), then by wins
+    players.sort(key=lambda s: (s["wins"] - s.get("penalties", 0), s["wins"]), reverse=True)
+
     lines = ["🏆 <b>Leaderboard</b>\n"]
+    medals = ["🥇", "🥈", "🥉"]
     for i, p in enumerate(players[:10], 1):
-        lines.append(f"{i}. {p['name']} — {p['wins']} win(s), {p['led']} round(s) led")
+        medal = medals[i - 1] if i <= 3 else f"{i}."
+        penalties = p.get("penalties", 0)
+        penalty_str = f"  ⚠️ -{penalties} penalty" if penalties > 0 else ""
+        net = p["wins"] - penalties
+        lines.append(
+            f"{medal} <b>{p['name']}</b> — {p['wins']} win(s) · {p['led']} led"
+            f"{penalty_str}\n"
+            f"    <i>Net score: {net:+d}</i>"
+        )
     await update.message.reply_html("\n".join(lines))
 
 
 async def addword_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("Usage: /addword <word>")
-    word = context.args[0].lower()
+    word = context.args[0].lower().strip()
+    if not word.isalpha():
+        return await update.message.reply_text("Only letters allowed — no numbers or symbols.")
     if len(word) > 30:
         return await update.message.reply_text("Word too long (max 30 characters).")
     if word in config.WORD_LIST:
-        return await update.message.reply_text("That word is already in the list!")
+        return await update.message.reply_text(f"'{word.capitalize()}' is already in the word list!")
     if word in game_state.pending_words:
         return await update.message.reply_text("That word is already pending approval.")
 
@@ -153,14 +169,14 @@ async def addword_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=config.OWNER_ID,
             text=(
-                f"📝 New word suggestion\n"
-                f"Word: <b>{word}</b>\n"
+                f"📝 <b>New word suggestion</b>\n"
+                f"Word: <b>{word.capitalize()}</b>\n"
                 f"From: {user.first_name} (id: <code>{user.id}</code>)"
             ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
-        await update.message.reply_text("✅ Sent for approval!")
+        await update.message.reply_text(f"✅ '{word.capitalize()}' sent for approval!")
     except Exception:
         await update.message.reply_text("⚠️ Could not reach the bot owner. Try again later.")
 
@@ -168,16 +184,14 @@ async def addword_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner-only: list all pending word suggestions with approve/reject buttons."""
     if update.effective_user.id != config.OWNER_ID:
-        return await update.message.reply_text("This command is only for the bot owner.")
+        return await update.message.reply_text("⛔ This command is only for the bot owner.")
 
     if not game_state.pending_words:
-        return await update.message.reply_text("✅ No pending word suggestions.")
+        return await update.message.reply_text("✅ No pending word suggestions right now.")
 
-    await update.message.reply_text(
-        f"📋 <b>Pending word suggestions ({len(game_state.pending_words)})</b>",
-        parse_mode="HTML",
+    await update.message.reply_html(
+        f"📋 <b>Pending suggestions ({len(game_state.pending_words)})</b>"
     )
-
     for word, info in list(game_state.pending_words.items()):
         encoded = encode_word(word)
         keyboard = [[
@@ -185,7 +199,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("❌ Reject",  callback_data=f"rej_{encoded}"),
         ]]
         await update.message.reply_html(
-            f"Word: <b>{word}</b>\n"
+            f"Word: <b>{word.capitalize()}</b>\n"
             f"Suggested by: {info['from_name']}",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
@@ -197,7 +211,6 @@ async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = game_state.active_games.get(chat_id)
 
     if game and game.get("is_active"):
-        # Game already running
         if user.id == game["leader_id"]:
             await update.message.reply_html(
                 f"🦕 <b>{game['leader_name']}</b> is explaining the word!",
@@ -206,12 +219,12 @@ async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_html(
                 f"🦕 <b>{game['leader_name']}</b> is explaining the word!\n"
-                "Send a message to guess it!"
+                "Send a message in the chat to guess it!"
             )
     else:
-        # No active game — ask for a volunteer
         await update.message.reply_html(
-            f"🦕 <b>{user.first_name}</b> refused to lead!",
+            f"🦕 <b>{user.first_name}</b> refused to lead!\n"
+            "Will someone else step up?",
             reply_markup=volunteer_keyboard(),
         )
 
@@ -237,31 +250,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fire_auto_drop(chat_id, caller_id, context.bot)
         await query.answer()
         await query.edit_message_text(
-            f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!\n"
-            f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>",
+            f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!",
             parse_mode="HTML",
             reply_markup=leader_keyboard(),
         )
         return
 
-    # --- Start new game button (after a win) ---
+    # --- Start new game button (shown after a win) ---
     if data == "newgame":
         existing = game_state.active_games.get(chat_id)
         if existing and existing.get("is_active"):
-            # Auto-start already happened, just acknowledge
             await query.answer("Game already started!", show_alert=False)
             return
-        # Manual start if auto-start didn't happen
         game_state.start_new_round(chat_id, caller_id, query.from_user.first_name)
         fire_auto_drop(chat_id, caller_id, context.bot)
         await query.answer()
         await query.edit_message_reply_markup(reply_markup=None)
         await context.bot.send_message(
             chat_id=chat_id,
-            text=(
-                f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!\n"
-                f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>"
-            ),
+            text=f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!",
             parse_mode="HTML",
             reply_markup=leader_keyboard(),
         )
@@ -275,8 +282,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         word = decode_word(data[4:])
         config.add_new_word(word)
         game_state.remove_pending(word)
-        await query.answer("Approved!")
-        await query.edit_message_text(f"✅ Approved and added: <b>{word}</b>", parse_mode="HTML")
+        await query.answer(f"✅ Approved!")
+        await query.edit_message_text(
+            f"✅ Approved and added to word list: <b>{word.capitalize()}</b>",
+            parse_mode="HTML",
+        )
         return
 
     if data.startswith("rej_"):
@@ -286,26 +296,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         word = decode_word(data[4:])
         game_state.remove_pending(word)
         await query.answer("Rejected.")
-        await query.edit_message_text(f"❌ Rejected: <b>{word}</b>", parse_mode="HTML")
+        await query.edit_message_text(
+            f"❌ Rejected: <b>{word.capitalize()}</b>",
+            parse_mode="HTML",
+        )
         return
 
     # --- Game controls (leader only) ---
     game = game_state.active_games.get(chat_id)
 
     if not game or not game["is_active"]:
-        await query.answer("No active game.", show_alert=True)
+        await query.answer("No active game right now.", show_alert=True)
         return
 
     if data in ("see", "write", "change"):
         if caller_id != game["leader_id"]:
-            await query.answer("Only the leader can use this.", show_alert=True)
+            await query.answer("Only the leader can use this!", show_alert=True)
             return
-        # Refresh idle timer on any leader interaction
+        # Refresh idle timer on any leader button press
         game_state.update_activity(chat_id)
 
     if data == "see":
         await query.answer(
-            f"🦕 Your word is: {game['word'].upper()}",
+            f"🦕 Your word is: {game['word'].capitalize()}",
             show_alert=True,
         )
 
@@ -313,10 +326,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=caller_id,
-                text=f"🦕 Your secret word is: <b>{game['word'].upper()}</b>",
+                text=f"🦕 Your secret word is: <b>{game['word'].capitalize()}</b>",
                 parse_mode="HTML",
             )
-            await query.answer("Word sent to your private chat!")
+            await query.answer("Word sent to your DM!")
         except Exception:
             await query.answer(
                 "❌ I can't DM you. Send /start to me in private first, then try again.",
@@ -325,7 +338,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "change":
         new_word = game_state.change_word(chat_id)
-        await query.answer(f"🔄 New word: {new_word.upper()}", show_alert=True)
+        await query.answer(f"🔄 New word: {new_word.capitalize()}", show_alert=True)
 
     elif data == "drop":
         if caller_id != game["leader_id"] and caller_id != config.OWNER_ID:
@@ -335,7 +348,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game_state.drop_leader(chat_id)
         await query.answer("Lead dropped.")
         await query.edit_message_text(
-            f"🦕 <b>{leader_name}</b> refused to lead!",
+            f"🦕 <b>{leader_name}</b> refused to lead!\nWill someone else step up?",
             parse_mode="HTML",
             reply_markup=volunteer_keyboard(),
         )
@@ -348,36 +361,46 @@ async def check_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = game_state.active_games.get(chat_id)
     if not game or not game["is_active"]:
         return
-    guesser = update.effective_user
-    if guesser.id == game["leader_id"]:
-        # Leader is typing hints — reset idle timer
-        game_state.update_activity(chat_id)
-        return
-    if update.message.text.lower().strip() != game["word"]:
+
+    sender = update.effective_user
+    text = update.message.text.lower().strip()
+
+    # ── Leader sent a message ──────────────────────────────────────────────────
+    if sender.id == game["leader_id"]:
+        game_state.update_activity(chat_id)  # any leader message resets idle timer
+
+        if text == game["word"]:
+            # Leader typed the secret word — penalty!
+            game_state.record_penalty(sender.id, sender.first_name, chat_id)
+            await update.message.reply_html(
+                f"⚠️ <b>{sender.first_name}</b>, you typed the secret word!\n"
+                f"<b>-1 penalty point</b> added to your score."
+            )
         return
 
-    # ── Correct guess ──────────────────────────────────────────────────────────
+    # ── Guesser message ───────────────────────────────────────────────────────
+    if text != game["word"]:
+        return
+
+    # ── Correct guess! ────────────────────────────────────────────────────────
     word = game["word"]
     game_state.drop_leader(chat_id)
-    game_state.record_win(guesser.id, guesser.first_name, chat_id)
+    game_state.record_win(sender.id, sender.first_name, chat_id)
 
-    # 1. Victory message with "Start new game!" button
+    # 1. Victory announcement
     await update.message.reply_html(
-        f"🎉 <b>{guesser.first_name}</b> found the word! <b>{word}</b>",
+        f"🎉 <b>{sender.first_name}</b> found the word! <b>{word}</b>",
         reply_markup=new_game_keyboard(),
     )
 
-    # 2. Auto-assign the winner as the new leader immediately
-    game_state.start_new_round(chat_id, guesser.id, guesser.first_name)
-    fire_auto_drop(chat_id, guesser.id, context.bot)
+    # 2. Winner auto-becomes the new leader
+    game_state.start_new_round(chat_id, sender.id, sender.first_name)
+    fire_auto_drop(chat_id, sender.id, context.bot)
 
-    # 3. Post the new-leader message with 2×2 controls
+    # 3. Post leader controls
     await context.bot.send_message(
         chat_id=chat_id,
-        text=(
-            f"🦕 <b>{guesser.first_name}</b> is explaining the word!\n"
-            f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>"
-        ),
+        text=f"🦕 <b>{sender.first_name}</b> is explaining the word!",
         parse_mode="HTML",
         reply_markup=leader_keyboard(),
     )

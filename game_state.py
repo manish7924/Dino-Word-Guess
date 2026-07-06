@@ -13,7 +13,16 @@ def get_random_word():
 
 def init_user(user_id, name):
     if user_id not in user_stats:
-        user_stats[user_id] = {"name": name, "wins": 0, "led": 0, "played_in": set()}
+        user_stats[user_id] = {
+            "name": name,
+            "wins": 0,
+            "led": 0,
+            "penalties": 0,
+            "played_in": set(),
+        }
+    else:
+        # Back-fill penalties field for users created before this version
+        user_stats[user_id].setdefault("penalties", 0)
 
 
 def start_new_round(chat_id, user_id, user_name):
@@ -50,6 +59,13 @@ def drop_leader(chat_id):
 def record_win(user_id, name, chat_id):
     init_user(user_id, name)
     user_stats[user_id]["wins"] += 1
+    user_stats[user_id]["played_in"].add(chat_id)
+
+
+def record_penalty(user_id, name, chat_id):
+    """Called when a leader leaks the secret word by typing it in chat."""
+    init_user(user_id, name)
+    user_stats[user_id]["penalties"] += 1
     user_stats[user_id]["played_in"].add(chat_id)
 
 

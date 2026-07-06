@@ -1,4 +1,0 @@
-dinosaur
-meteor
-fossil
-jungle

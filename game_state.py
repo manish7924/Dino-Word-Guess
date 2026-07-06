@@ -1,4 +1,5 @@
 import random
+import time
 from config import WORD_LIST
 
 active_games = {}
@@ -24,7 +25,14 @@ def start_new_round(chat_id, user_id, user_name):
         "leader_name": user_name,
         "word": get_random_word(),
         "is_active": True,
+        "started_at": time.time(),
+        "last_activity": time.time(),
     }
+
+
+def update_activity(chat_id):
+    if chat_id in active_games and active_games[chat_id]["is_active"]:
+        active_games[chat_id]["last_activity"] = time.time()
 
 
 def change_word(chat_id):

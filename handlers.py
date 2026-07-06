@@ -1,6 +1,12 @@
+import asyncio
+import time
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import game_state, config
+
+# How long (seconds) before the bot auto-drops an idle leader
+AUTO_DROP_SECONDS = 120  # 2 minutes
 
 HELP_TEXT = (
     "🦕 <b>Dino Word Guess</b>\n\n"
@@ -10,7 +16,7 @@ HELP_TEXT = (
     "3. Tap ✏️ <b>Write word</b> to get the word sent to your private DM.\n"
     "4. Tap 🔄 <b>Change word</b> to get a new random word.\n"
     "5. Everyone else guesses by sending messages in the chat.\n"
-    "6. First correct guess wins a point!\n\n"
+    "6. First correct guess wins a point and becomes the next leader!\n\n"
     "<b>Commands:</b>\n"
     "/game — start a round (volunteer as leader)\n"
     "/scores — leaderboard for this chat\n"
@@ -39,6 +45,12 @@ def volunteer_keyboard():
     ]])
 
 
+def new_game_keyboard():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🎮 Start new game!", callback_data="newgame"),
+    ]])
+
+
 def encode_word(word):
     return word.replace("_", "\u2019")
 
@@ -47,7 +59,50 @@ def decode_word(encoded):
     return encoded.replace("\u2019", "_")
 
 
-# ── Commands ──────────────────────────────────────────────────────────────────
+# ── Auto-drop task ─────────────────────────────────────────────────────────────
+
+async def schedule_auto_drop(chat_id: int, leader_id: int, bot):
+    """Loop until the leader has been idle for AUTO_DROP_SECONDS, then drop them."""
+    while True:
+        await asyncio.sleep(AUTO_DROP_SECONDS)
+
+        game = game_state.active_games.get(chat_id)
+        # Stop watching if game ended or a different leader took over
+        if not game or not game["is_active"] or game["leader_id"] != leader_id:
+            return
+
+        idle_secs = time.time() - game.get("last_activity", 0)
+        if idle_secs < AUTO_DROP_SECONDS:
+            # Leader was active since we last checked — wait out the remaining gap
+            remaining = AUTO_DROP_SECONDS - idle_secs
+            await asyncio.sleep(remaining)
+            # Re-check at the top of the loop
+            continue
+
+        # Leader has been idle long enough — drop them
+        leader_name = game["leader_name"]
+        game_state.drop_leader(chat_id)
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"⏰ <b>{leader_name}</b> was idle too long — lead dropped!\n"
+                    "🦕 Who wants to take over?"
+                ),
+                parse_mode="HTML",
+                reply_markup=volunteer_keyboard(),
+            )
+        except Exception:
+            pass
+        return
+
+
+def fire_auto_drop(chat_id: int, leader_id: int, bot):
+    """Non-async helper — schedules the auto-drop coroutine as a background task."""
+    asyncio.create_task(schedule_auto_drop(chat_id, leader_id, bot))
+
+
+# ── Commands ───────────────────────────────────────────────────────────────────
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
@@ -161,7 +216,7 @@ async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# ── Callback buttons ──────────────────────────────────────────────────────────
+# ── Callback buttons ───────────────────────────────────────────────────────────
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -179,15 +234,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         game_state.start_new_round(chat_id, caller_id, query.from_user.first_name)
+        fire_auto_drop(chat_id, caller_id, context.bot)
         await query.answer()
         await query.edit_message_text(
-            f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!",
+            f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!\n"
+            f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>",
             parse_mode="HTML",
             reply_markup=leader_keyboard(),
         )
         return
 
-    # --- Word approval (owner only, works from DM or group) ---
+    # --- Start new game button (after a win) ---
+    if data == "newgame":
+        existing = game_state.active_games.get(chat_id)
+        if existing and existing.get("is_active"):
+            # Auto-start already happened, just acknowledge
+            await query.answer("Game already started!", show_alert=False)
+            return
+        # Manual start if auto-start didn't happen
+        game_state.start_new_round(chat_id, caller_id, query.from_user.first_name)
+        fire_auto_drop(chat_id, caller_id, context.bot)
+        await query.answer()
+        await query.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🦕 <b>{query.from_user.first_name}</b> is explaining the word!\n"
+                f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>"
+            ),
+            parse_mode="HTML",
+            reply_markup=leader_keyboard(),
+        )
+        return
+
+    # --- Word approval (owner only) ---
     if data.startswith("app_"):
         if caller_id != config.OWNER_ID:
             await query.answer("Only the bot owner can approve words.", show_alert=True)
@@ -196,7 +276,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         config.add_new_word(word)
         game_state.remove_pending(word)
         await query.answer("Approved!")
-        await query.edit_message_reply_markup(reply_markup=None)
         await query.edit_message_text(f"✅ Approved and added: <b>{word}</b>", parse_mode="HTML")
         return
 
@@ -207,7 +286,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         word = decode_word(data[4:])
         game_state.remove_pending(word)
         await query.answer("Rejected.")
-        await query.edit_message_reply_markup(reply_markup=None)
         await query.edit_message_text(f"❌ Rejected: <b>{word}</b>", parse_mode="HTML")
         return
 
@@ -222,6 +300,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if caller_id != game["leader_id"]:
             await query.answer("Only the leader can use this.", show_alert=True)
             return
+        # Refresh idle timer on any leader interaction
+        game_state.update_activity(chat_id)
 
     if data == "see":
         await query.answer(
@@ -261,22 +341,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# ── Message handler ───────────────────────────────────────────────────────────
+# ── Message handler ────────────────────────────────────────────────────────────
 
 async def check_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    game = game_state.active_games.get(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    game = game_state.active_games.get(chat_id)
     if not game or not game["is_active"]:
         return
-    if update.effective_user.id == game["leader_id"]:
+    guesser = update.effective_user
+    if guesser.id == game["leader_id"]:
+        # Leader is typing hints — reset idle timer
+        game_state.update_activity(chat_id)
         return
-    if update.message.text.lower().strip() == game["word"]:
-        guesser = update.effective_user
-        word = game["word"]
-        game_state.drop_leader(update.effective_chat.id)
-        game_state.record_win(guesser.id, guesser.first_name, update.effective_chat.id)
-        await update.message.reply_html(
-            f"🎉 <b>{guesser.first_name}</b> guessed it! "
-            f"The word was <b>{word.upper()}</b>.\n\n"
-            "Use /game to start a new round!",
-            reply_markup=volunteer_keyboard(),
-        )
+    if update.message.text.lower().strip() != game["word"]:
+        return
+
+    # ── Correct guess ──────────────────────────────────────────────────────────
+    word = game["word"]
+    game_state.drop_leader(chat_id)
+    game_state.record_win(guesser.id, guesser.first_name, chat_id)
+
+    # 1. Victory message with "Start new game!" button
+    await update.message.reply_html(
+        f"🎉 <b>{guesser.first_name}</b> found the word! <b>{word}</b>",
+        reply_markup=new_game_keyboard(),
+    )
+
+    # 2. Auto-assign the winner as the new leader immediately
+    game_state.start_new_round(chat_id, guesser.id, guesser.first_name)
+    fire_auto_drop(chat_id, guesser.id, context.bot)
+
+    # 3. Post the new-leader message with 2×2 controls
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"🦕 <b>{guesser.first_name}</b> is explaining the word!\n"
+            f"<i>If idle for {AUTO_DROP_SECONDS//60} min, lead will be auto-dropped.</i>"
+        ),
+        parse_mode="HTML",
+        reply_markup=leader_keyboard(),
+    )

@@ -59,7 +59,10 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.check_guess))
 
     logger.info("🦕 Dino Word Guess Bot is running...")
-    app.run_polling(allowed_updates=["message", "callback_query"])
+    app.run_polling(
+        allowed_updates=["message", "callback_query"],
+        drop_pending_updates=True,
+    )
 
 if __name__ == "__main__":
     main()

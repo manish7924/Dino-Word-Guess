@@ -11,7 +11,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Token configuration (Replace with your actual Bot Token or load from environment/config)
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # The exact formatted help menu text
 HELP_TEXT = """ 🦕 ❔ Game commands:

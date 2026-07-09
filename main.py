@@ -16,23 +16,23 @@ app_web = Flask(__name__)
 
 @app_web.route('/')
 def home():
-    return "Crocodile Bot (Croco 2.0) is alive!"
+    return "Dino Bot (Dino 2.0) is alive!"
 
 def run_web():
     app_web.run(host='0.0.0.0', port=3000)
 
 async def post_init(application):
     commands = [
-        BotCommand("start",   "Welcome message & how to play Crocodile"),
-        BotCommand("game",    "Start or check the active Crocodile round"),
+        BotCommand("start",   "Welcome message & how to play Dino"),
+        BotCommand("game",    "Start or check the active Dino round"),
         BotCommand("addword", "Suggest a new secret word: /addword <word>"),
         BotCommand("scores",  "Show local leaderboard for this chat"),
         BotCommand("pending", "Owner: review pending word suggestions"),
-        BotCommand("ask",     "Ask the Croco 2.0 Multimodal AI a question"),
+        BotCommand("ask",     "Ask the Dino 2.0 Multimodal AI a question"),
         BotCommand("help",    "Show help guide"),
     ]
     await application.bot.set_my_commands(commands)
-    logger.info("Crocodile Bot commands registered.")
+    logger.info("Dino Bot commands registered.")
 
 def main():
     if not config.BOT_TOKEN:
@@ -54,15 +54,15 @@ def main():
     app.add_handler(CommandHandler("addword", handlers.addword_command))
     app.add_handler(CommandHandler("scores",  handlers.scores_command))
     app.add_handler(CommandHandler("pending", handlers.pending_command))
-    app.add_handler(CommandHandler("ask",     handlers.ask_croco_ai))
+    app.add_handler(CommandHandler("ask",     handlers.ask_dino_ai))
     app.add_handler(CallbackQueryHandler(handlers.button_handler))
     
     # Updated to process game guesses or forward conversations to AI
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.check_guess_or_chat))
-    # Multimodal photo handler for Croco 2.0 AI context
-    app.add_handler(MessageHandler(filters.PHOTO, handlers.croco_multimodal_handler))
+    # Multimodal photo handler for Dino 2.0 AI context
+    app.add_handler(MessageHandler(filters.PHOTO, handlers.dino_multimodal_handler))
 
-    logger.info("🐊 Crocodile Word Game & AI Bot is running...")
+    logger.info("🦕 Dino Word Game & AI Bot is running...")
     app.run_polling(
         allowed_updates=["message", "callback_query"],
         drop_pending_updates=True,

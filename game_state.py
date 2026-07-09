@@ -36,6 +36,7 @@ def start_new_round(chat_id, user_id, user_name):
         "is_active": True,
         "started_at": time.time(),
         "last_activity": time.time(),
+        "control_message_id": None,  # Tracks active inline control panel in group chats
     }
 
 

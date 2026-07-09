@@ -16,29 +16,28 @@ app_web = Flask(__name__)
 
 @app_web.route('/')
 def home():
-    return "Dino Bot is alive!"
+    return "Crocodile Bot (Croco 2.0) is alive!"
 
 def run_web():
     app_web.run(host='0.0.0.0', port=3000)
 
 async def post_init(application):
     commands = [
-        BotCommand("start",   "Welcome message & how to play"),
-        BotCommand("game",    "Start or check the current game"),
-        BotCommand("addword", "Suggest a new word: /addword <word>"),
-        BotCommand("scores",  "Show leaderboard for this chat"),
+        BotCommand("start",   "Welcome message & how to play Crocodile"),
+        BotCommand("game",    "Start or check the active Crocodile round"),
+        BotCommand("addword", "Suggest a new secret word: /addword <word>"),
+        BotCommand("scores",  "Show local leaderboard for this chat"),
         BotCommand("pending", "Owner: review pending word suggestions"),
-        BotCommand("help",    "Show help"),
+        BotCommand("ask",     "Ask the Croco 2.0 Multimodal AI a question"),
+        BotCommand("help",    "Show help guide"),
     ]
     await application.bot.set_my_commands(commands)
-    logger.info("Bot commands registered with Telegram.")
+    logger.info("Crocodile Bot commands registered.")
 
 def main():
     if not config.BOT_TOKEN:
         logger.error("BOT_TOKEN environment variable is not set.")
         sys.exit(1)
-    if config.OWNER_ID == 0:
-        logger.warning("OWNER_ID is not set — /addword approvals won't reach you.")
 
     Thread(target=run_web, daemon=True).start()
 
@@ -55,10 +54,15 @@ def main():
     app.add_handler(CommandHandler("addword", handlers.addword_command))
     app.add_handler(CommandHandler("scores",  handlers.scores_command))
     app.add_handler(CommandHandler("pending", handlers.pending_command))
+    app.add_handler(CommandHandler("ask",     handlers.ask_croco_ai))
     app.add_handler(CallbackQueryHandler(handlers.button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.check_guess))
+    
+    # Updated to process game guesses or forward conversations to AI
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.check_guess_or_chat))
+    # Multimodal photo handler for Croco 2.0 AI context
+    app.add_handler(MessageHandler(filters.PHOTO, handlers.croco_multimodal_handler))
 
-    logger.info("🦕 Dino Word Guess Bot is running...")
+    logger.info("🐊 Crocodile Word Game & AI Bot is running...")
     app.run_polling(
         allowed_updates=["message", "callback_query"],
         drop_pending_updates=True,

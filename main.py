@@ -11,10 +11,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Token configuration (Replace with your actual Bot Token or load from environment/config)
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # The exact formatted help menu text
-HELP_TEXT = """🐊❔ Game commands:
+HELP_TEXT = """ 🦕 ❔ Game commands:
 
 🎮 /game - start new game (🔤 /💠)
 🛑 /stop - stop current game

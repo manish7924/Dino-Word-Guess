@@ -5,13 +5,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import game_state, config
 
-# Croco 2.0 AI Integration setup
+# Dino 2.0 AI Integration setup
 import google.generativeai as genai
 from PIL import Image
 
-if config.CROCO_API_KEY:
-    genai.configure(api_key=config.CROCO_API_KEY)
-    # Powering Croco 2.0 Engine with fast multimodal features
+if config.DINO_API_KEY:
+    genai.configure(api_key=config.DINO_API_KEY)
+    # Powering Dino 2.0 Engine with fast multimodal features
     ai_model = genai.GenerativeModel('gemini-2.5-flash')
 else:
     ai_model = None
@@ -20,21 +20,21 @@ else:
 AUTO_DROP_SECONDS = 120  # 2 minutes
 
 HELP_TEXT = (
-    "🐊 <b>Crocodile Word Guess & AI</b>\n\n"
-    "<b>How to play Crocodile Game:</b>\n"
-    "1️⃣ /game — volunteer as the Crocodile leader by tapping the button.\n"
+    "🦕 <b>Dino Word Guess & AI</b>\n\n"
+    "<b>How to play Dino Game:</b>\n"
+    "1️⃣ /game — volunteer as the Dino leader by tapping the button.\n"
     "2️⃣ Leader uses <b>See word</b> 🔍 to view the hidden word.\n"
     "3️⃣ Give explanations or gestures in chat — <b>don't type or say the word itself!</b>\n"
     "4️⃣ Everyone else types text messages to guess.\n"
-    "5️⃣ First correct guess wins a point and becomes the next Crocodile!\n\n"
-    "<b>🤖 Croco 2.0 Multimodal AI Features:</b>\n"
-    "• Type <code>/ask &lt;your question&gt;</code> to chat with Croco 2.0.\n"
+    "5️⃣ First correct guess wins a point and becomes the next Dino!\n\n"
+    "<b>🤖 Dino 2.0 Multimodal AI Features:</b>\n"
+    "• Type <code>/ask &lt;your question&gt;</code> to chat with Dino 2.0.\n"
     "• Send a <b>Photo</b> with the word <code>/ask</code> in the caption for visual AI analysis!\n\n"
     "<b>Commands:</b>\n"
     "/game — start or check the current round\n"
     "/scores — leaderboard metrics\n"
     "/addword — suggest a new word\n"
-    "/ask — query the Croco 2.0 AI engine\n"
+    "/ask — query the Dino 2.0 AI engine\n"
     "/help — show this message\n\n"
     "⚠️ <i>In groups, Privacy Mode must be OFF in BotFather for guesses to work.</i>"
 )
@@ -55,7 +55,7 @@ def leader_keyboard():
 
 def volunteer_keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🐊 I want to be the Crocodile!", callback_data="lead"),
+        InlineKeyboardButton("🦕 I want to be the Dino!", callback_data="lead"),
     ]])
 
 
@@ -108,8 +108,8 @@ async def schedule_auto_drop(chat_id: int, leader_id: int, bot):
             await bot.send_message(
                 chat_id=chat_id,
                 text=(
-                    f"⏰ <b>{leader_name}</b> was idle too long — Crocodile lead dropped!\n"
-                    "🐊 Who wants to step up?"
+                    f"⏰ <b>{leader_name}</b> was idle too long — Dino lead dropped!\n"
+                    "🦕 Who wants to step up?"
                 ),
                 parse_mode="HTML",
                 reply_markup=volunteer_keyboard(),
@@ -128,7 +128,7 @@ def fire_auto_drop(chat_id: int, leader_id: int, bot):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
-        "👋 Welcome to <b>Crocodile Word Game & AI Bot</b>! 🐊\n\n" + HELP_TEXT
+        "👋 Welcome to <b>Dino Word Game & AI Bot</b>! 🦕\n\n" + HELP_TEXT
     )
 
 
@@ -148,7 +148,7 @@ async def scores_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Sort by net score (wins - penalties), then by wins
     players.sort(key=lambda s: (s["wins"] - s.get("penalties", 0), s["wins"]), reverse=True)
 
-    lines = ["🏆 <b>Crocodile Leaderboard</b>\n"]
+    lines = ["🏆 <b>Dino Leaderboard</b>\n"]
     medals = ["🥇", "🥈", "🥉"]
     for i, p in enumerate(players[:10], 1):
         medal = medals[i - 1] if i <= 3 else f"{i}."
@@ -189,7 +189,7 @@ async def addword_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=config.OWNER_ID,
             text=(
-                f"📝 <b>Croco 2.0 Word Suggestion</b>\n"
+                f"📝 <b>Dino 2.0 Word Suggestion</b>\n"
                 f"Word: <b>{word.capitalize()}</b>\n"
                 f"From: {user.first_name} (id: <code>{user.id}</code>)"
             ),
@@ -233,57 +233,57 @@ async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if game and game.get("is_active"):
         if user.id == game["leader_id"]:
             await update.message.reply_html(
-                f"🐊 <b>{game['leader_name']}</b> is currently acting out the secret word!",
+                f"🦕 <b>{game['leader_name']}</b> is currently acting out the secret word!",
                 reply_markup=leader_keyboard(),
             )
         else:
             await update.message.reply_html(
-                f"🐊 <b>{game['leader_name']}</b> is explaining the word!\n"
+                f"🦕 <b>{game['leader_name']}</b> is explaining the word!\n"
                 "Send a message in the chat to guess it!"
             )
     else:
         await update.message.reply_html(
-            f"🐊 No active Crocodile game found here. Who wants to take the lead?",
+            f"🦕 No active Dino game found here. Who wants to take the lead?",
             reply_markup=volunteer_keyboard(),
         )
 
 
-# ── Croco 2.0 AI Core Handlers ──────────────────────────────────────────────────
+# ── Dino 2.0 AI Core Handlers ──────────────────────────────────────────────────
 
-async def ask_croco_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Text-only query channel to Croco 2.0 Engine"""
+async def ask_dino_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Text-only query channel to Dino 2.0 Engine"""
     if not ai_model:
-        return await update.message.reply_text("🤖 Croco 2.0 engine is offline. CROCO_API_KEY missing.")
+        return await update.message.reply_text("🤖 Dino 2.0 engine is offline. DINO_API_KEY missing.")
     
     query = " ".join(context.args)
     if not query:
-        return await update.message.reply_text("Please provide a prompt! Example: /ask Tell me a joke about crocodiles.")
+        return await update.message.reply_text("Please provide a prompt! Example: /ask Tell me a joke about dinosaurs.")
     
-    status_msg = await update.message.reply_text("🤖 <i>Croco 2.0 is processing your thought...</i>", parse_mode="HTML")
+    status_msg = await update.message.reply_text("🤖 <i>Dino 2.0 is processing your thought...</i>", parse_mode="HTML")
     try:
-        response = ai_model.generate_content(f"You are Croco 2.0, a witty, super intelligent Crocodile AI assistant. Answer this briefly and smartly: {query}")
+        response = ai_model.generate_content(f"You are Dino 2.0, a witty, super intelligent dinosaur AI assistant. Answer this briefly and smartly: {query}")
         await status_msg.edit_text(response.text)
     except Exception as e:
         await status_msg.edit_text(f"❌ Error generating response: {str(e)}")
 
 
-async def croco_multimodal_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def dino_multimodal_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Processes images with /ask caption commands"""
     caption = update.message.caption or ""
     if not caption.startswith("/ask"):
         return 
 
     if not ai_model:
-        return await update.message.reply_text("🤖 Croco 2.0 Vision engine configuration missing.")
+        return await update.message.reply_text("🤖 Dino 2.0 Vision engine configuration missing.")
 
-    status_msg = await update.message.reply_text("🐊 <i>Croco 2.0 AI is analyzing your image...</i>", parse_mode="HTML")
+    status_msg = await update.message.reply_text("🦕 <i>Dino 2.0 AI is analyzing your image...</i>", parse_mode="HTML")
     try:
         prompt_text = caption.replace("/ask", "").strip() or "Describe what you see in this image relative to the theme."
         photo_file = await update.message.photo[-1].get_file()
         photo_bytes = await photo_file.download_as_bytearray()
         
         image = Image.open(io.BytesIO(photo_bytes))
-        response = ai_model.generate_content([f"[Croco 2.0 Engine Vision Prompt]: {prompt_text}", image])
+        response = ai_model.generate_content([f"[Dino 2.0 Engine Vision Prompt]: {prompt_text}", image])
         await status_msg.edit_text(response.text)
     except Exception as e:
         await status_msg.edit_text(f"❌ Vision processing failed: {str(e)}")
@@ -320,7 +320,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Fire a brand new message down inside the active conversation flow
         new_msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🐊 <b>{query.from_user.first_name}</b> became the Crocodile! Give hints in chat without saying the secret word!",
+            text=f"🦕 <b>{query.from_user.first_name}</b> became the Dino! Give hints in chat without saying the secret word!",
             parse_mode="HTML",
             reply_markup=leader_keyboard()
         )
@@ -337,7 +337,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game_state.remove_pending(word)
         await query.answer("Approved!")
         await query.edit_message_text(
-            f"✅ Approved and added to swamp word list: <b>{word.capitalize()}</b>",
+            f"✅ Approved and added to prehistoric word list: <b>{word.capitalize()}</b>",
             parse_mode="HTML",
         )
         return
@@ -364,13 +364,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data in ("see", "write", "change"):
         if caller_id != game["leader_id"]:
-            await query.answer("Only the active Crocodile can use this!", show_alert=True)
+            await query.answer("Only the active Dino can use this!", show_alert=True)
             return
         game_state.update_activity(chat_id)
 
     if data == "see":
         await query.answer(
-            f"🐊 Your secret word is: {game['word'].upper()}",
+            f"🦕 Your secret word is: {game['word'].upper()}",
             show_alert=True,
         )
 
@@ -378,7 +378,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=caller_id,
-                text=f"🐊 Your secret word is: <b>{game['word'].upper()}</b>",
+                text=f"🦕 Your secret word is: <b>{game['word'].upper()}</b>",
                 parse_mode="HTML",
             )
             await query.answer("Word sent to your DM!")
@@ -394,7 +394,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "drop":
         if caller_id != game["leader_id"] and caller_id != config.OWNER_ID:
-            await query.answer("Only the Crocodile can drop their role.", show_alert=True)
+            await query.answer("Only the Dino can drop their role.", show_alert=True)
             return
         game_state.drop_leader(chat_id)
         await query.answer("Lead dropped.")
@@ -404,7 +404,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await context.bot.send_message(
             chat_id=chat_id,
-            text="🐊 The Crocodile went back to the river. Who is next?",
+            text="🦕 The Dino went back to the jungle. Who is next?",
             parse_mode="HTML",
             reply_markup=volunteer_keyboard(),
         )
@@ -461,7 +461,7 @@ async def check_guess_or_chat(update: Update, context: ContextTypes.DEFAULT_TYPE
     # 3. Post a completely fresh game panel message right at the bottom of the group stream
     new_game_msg = await context.bot.send_message(
         chat_id=chat_id,
-        text=f"🐊 <b>{sender.first_name}</b> is now the Crocodile! Use the controls below to check your secret word.",
+        text=f"🦕 <b>{sender.first_name}</b> is now the Dino! Use the controls below to check your secret word.",
         parse_mode="HTML",
         reply_markup=leader_keyboard()
     )
